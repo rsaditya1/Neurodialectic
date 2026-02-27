@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -9,8 +8,7 @@ import logging
 import traceback
 import os
 
-# Import everything from your backend
-from backend import create_workflow
+from backend import create_workflow, log_accumulator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,6 +41,8 @@ class QueryResponse(BaseModel):
     refinement_outputs: list = []
     confidence: float = 0.0
     iterations_used: int = 0
+    confidence_history: list = []
+    logs: list = []
 
 
 @app.get("/health")
@@ -55,6 +55,8 @@ async def run_query(request: QueryRequest):
     try:
         logger.info(f"Received query: {request.query[:100]}...")
 
+        log_accumulator.start()
+
         workflow = create_workflow(request.query, request.max_iterations)
         compiled = workflow.compile()
 
@@ -62,6 +64,8 @@ async def run_query(request: QueryRequest):
             compiled.invoke,
             {"query": request.query}
         )
+
+        log_accumulator.stop()
 
         response = QueryResponse(
             final_answer=result.get("final_answer"),
@@ -71,13 +75,16 @@ async def run_query(request: QueryRequest):
             validator_output=result.get("validator_output"),
             refinement_outputs=result.get("refinement_outputs", []),
             confidence=result.get("confidence", 0.0),
-            iterations_used=result.get("iteration", 0)
+            iterations_used=result.get("iteration", 0),
+            confidence_history=result.get("confidence_history", []),
+            logs=log_accumulator.get_logs()
         )
 
         logger.info(f"Query completed. Confidence: {response.confidence}")
         return response
 
     except Exception as e:
+        log_accumulator.stop()
         logger.error(f"Error processing query: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
@@ -85,7 +92,6 @@ async def run_query(request: QueryRequest):
         )
 
 
-# Serve the frontend HTML at the root URL
 @app.get("/")
 async def serve_frontend():
     html_path = os.path.join(os.path.dirname(__file__), "frontend", "index.html")

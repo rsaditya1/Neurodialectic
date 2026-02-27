@@ -10,23 +10,88 @@ import os
 import re
 import json
 import logging
+import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 # ---------------- SETUP ----------------
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+OUTPUT_DIR = "outputs"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ---------------- LOGGING ----------------
+
+logger = logging.getLogger("neurodialectic")
+logger.setLevel(logging.INFO)
+
+# Prevent duplicate handlers on reimport
+if not logger.handlers:
+    log_file_path = os.path.join(
+        OUTPUT_DIR,
+        f"neurodialectic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    )
+
+    file_handler = RotatingFileHandler(
+        log_file_path,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3
+    )
+
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+# ---------------- LOG ACCUMULATOR ----------------
+# Captures logs per-run so we can send them to the frontend
+
+class LogAccumulator(logging.Handler):
+    """Collects log entries in memory for the current run."""
+
+    def __init__(self):
+        super().__init__()
+        self.records = []
+        self.active = False
+
+    def emit(self, record):
+        if self.active:
+            self.records.append({
+                "timestamp": datetime.fromtimestamp(record.created).strftime("%H:%M:%S.%f")[:-3],
+                "level": record.levelname,
+                "message": record.getMessage()
+            })
+
+    def start(self):
+        self.records = []
+        self.active = True
+
+    def stop(self):
+        self.active = False
+
+    def get_logs(self):
+        return list(self.records)
+
+
+log_accumulator = LogAccumulator()
+log_accumulator.setFormatter(logging.Formatter("%(message)s"))
+logger.addHandler(log_accumulator)
+
+# ---------------- API KEYS ----------------
 
 groq_key = os.getenv("GROQ_SCAR_KEY")
 cohere_key = os.getenv("COHERE_API_KEY")
 
 if not all([groq_key, cohere_key]):
     raise ValueError("Missing API keys")
-
-OUTPUT_DIR = "outputs"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ---------------- LIMITS ----------------
 
@@ -71,30 +136,51 @@ vector_store = Chroma(
     persist_directory="./memory_db"
 )
 
+# ---------------- RETRY LOGIC ----------------
+
+def safe_invoke(llm, prompt, node_name="LLM", retries=3, base_delay=2):
+    """
+    Invoke an LLM with exponential backoff retry.
+    Logs every attempt, warning on failure, error if all retries exhausted.
+    """
+    for attempt in range(retries):
+        try:
+            logger.info(f"{node_name} | Attempt {attempt + 1}/{retries}")
+            start_time = time.time()
+
+            response = llm.invoke(prompt[:MAX_PROMPT_CHARS]).content
+
+            elapsed = round(time.time() - start_time, 2)
+            logger.info(f"{node_name} | Success | {len(response)} chars | {elapsed}s")
+            return response
+
+        except Exception as e:
+            elapsed = round(time.time() - start_time, 2)
+            logger.warning(
+                f"{node_name} | Attempt {attempt + 1}/{retries} failed after {elapsed}s | {type(e).__name__}: {str(e)[:200]}"
+            )
+
+            if attempt < retries - 1:
+                sleep_time = base_delay * (2 ** attempt)
+                logger.info(f"{node_name} | Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
+            else:
+                logger.error(f"{node_name} | All {retries} retries exhausted")
+                raise
+
+
 # ---------------- CONFIDENCE PARSER ----------------
 
 def parse_confidence(text: str) -> float:
     """
     Robustly extract a confidence score from messy LLM output.
-    Handles:
-      - <think>...</think> wrapper tags (qwen3)
-      - "Confidence: 0.85"
-      - "Confidence: 85%"
-      - "confidence_score: 0.9"
-      - "0.72" on its own line
-      - Markdown bold like **0.85**
-    Returns float between 0.0 and 1.0, defaults to 0.5 on failure.
     """
-
-    # Strip <think>...</think> blocks entirely
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     cleaned = cleaned.strip()
 
     if not cleaned:
-        # Everything was inside <think> tags — try parsing from original
         cleaned = text
 
-    # Strategy 1: Look for explicit "Confidence: X" pattern
     patterns = [
         r"[Cc]onfidence[\s_]*(?:[Ss]core)?[\s:=]*\*?\*?([0-9]+(?:\.[0-9]+)?)\s*%",
         r"[Cc]onfidence[\s_]*(?:[Ss]core)?[\s:=]*\*?\*?([0-9]*\.?[0-9]+)\s*(?:/\s*1(?:\.0)?)?\*?\*?",
@@ -108,18 +194,16 @@ def parse_confidence(text: str) -> float:
                 value = value / 100.0
             return max(0.0, min(1.0, value))
 
-    # Strategy 2: Find any decimal between 0 and 1 in the cleaned text
     decimals = re.findall(r"\b(0\.\d+|1\.0)\b", cleaned)
     if decimals:
         return float(decimals[0])
 
-    # Strategy 3: Find any percentage
     percentages = re.findall(r"(\d{1,3})\s*%", cleaned)
     if percentages:
         value = float(percentages[0]) / 100.0
         return max(0.0, min(1.0, value))
 
-    logger.warning(f"Could not parse confidence from validator output. First 200 chars: {cleaned[:200]}")
+    logger.warning(f"Confidence parse failed | First 200 chars: {cleaned[:200]}")
     return 0.5
 
 
@@ -140,12 +224,17 @@ def create_workflow(query, max_iterations=5):
         critic_output: Optional[str]
         validator_output: Optional[str]
         refinement_outputs: List[str]
+        confidence_history: List[float]
 
     workflow = StateGraph(GraphState)
 
     # -------- GENERATOR --------
     def generator_node(state):
         try:
+            logger.info("=" * 50)
+            logger.info(f"PIPELINE START | Query: {state['query'][:100]}")
+            logger.info("=" * 50)
+
             memories = vector_store.similarity_search(state["query"], k=1)
 
             memory_context = ""
@@ -154,6 +243,7 @@ def create_workflow(query, max_iterations=5):
             memory_context = memory_context.strip()[:MAX_MEMORY_CHARS]
 
             if memory_context:
+                logger.info(f"MEMORY | Retrieved {len(memories)} relevant memories")
                 prompt = f"""Answer clearly with structured reasoning.
 
 Question:
@@ -162,34 +252,41 @@ Question:
 Avoid repeating these past failure patterns:
 {memory_context}"""
             else:
+                logger.info("MEMORY | No relevant memories found")
                 prompt = f"""Answer clearly with structured reasoning.
 
 Question:
 {state['query']}"""
 
-            draft = generator_llm.invoke(prompt[:MAX_PROMPT_CHARS]).content
-            logger.info(f"Generator produced {len(draft)} chars")
+            draft = safe_invoke(generator_llm, prompt, "GENERATOR")
+
+            logger.info("GENERATOR | Initial draft complete")
 
             return {
                 "draft": draft,
                 "generator_output": draft,
                 "iteration": 0,
-                "refinement_outputs": []
+                "refinement_outputs": [],
+                "confidence_history": []
             }
 
         except Exception as e:
-            logger.error(f"Generator failed: {e}")
+            logger.error(f"GENERATOR | Fatal error: {e}")
             fallback = f"I encountered an error generating a response: {str(e)}"
             return {
                 "draft": fallback,
                 "generator_output": fallback,
                 "iteration": 0,
-                "refinement_outputs": []
+                "refinement_outputs": [],
+                "confidence_history": []
             }
 
     # -------- CRITIC --------
     def critic_node(state):
         try:
+            iteration = state.get("iteration", 0)
+            logger.info(f"CRITIC | Starting analysis (iteration {iteration})")
+
             prompt = f"""You are a critical reviewer. Analyze the following answer for:
 1. Factual accuracy
 2. Logical consistency
@@ -201,8 +298,9 @@ Be specific about what is wrong and what could be improved.
 Answer to critique:
 {state['draft']}"""
 
-            critique = critic_llm.invoke(prompt[:MAX_PROMPT_CHARS]).content
-            logger.info(f"Critic produced {len(critique)} chars")
+            critique = safe_invoke(critic_llm, prompt, "CRITIC")
+
+            logger.info(f"CRITIC | Analysis complete")
 
             return {
                 "critique": critique,
@@ -210,7 +308,7 @@ Answer to critique:
             }
 
         except Exception as e:
-            logger.error(f"Critic failed: {e}")
+            logger.error(f"CRITIC | Fatal error: {e}")
             fallback = f"Critique unavailable due to error: {str(e)}"
             return {
                 "critique": fallback,
@@ -220,6 +318,8 @@ Answer to critique:
     # -------- VALIDATOR --------
     def validator_node(state):
         try:
+            logger.info("VALIDATOR | Starting confidence evaluation")
+
             prompt = f"""You are a strict answer quality evaluator.
 
 Rate the answer below on a scale from 0.0 to 1.0 based on accuracy, completeness, and clarity.
@@ -237,31 +337,44 @@ Reason: <one sentence explanation>
 
 Do NOT include any other text, thinking, or preamble. Just those two lines."""
 
-            response = validator_llm.invoke(prompt[:MAX_PROMPT_CHARS]).content
-
-            logger.info(f"Raw validator response ({len(response)} chars): {response[:300]}")
+            response = safe_invoke(validator_llm, prompt, "VALIDATOR")
 
             confidence = parse_confidence(response)
 
-            # Clean the response for display — strip <think> tags
+            # If parse failed (got default 0.5), retry once with fresh call
+            if confidence == 0.5 and "0.5" not in response[:100]:
+                logger.warning("VALIDATOR | Confidence parse returned default, retrying...")
+                retry_response = safe_invoke(validator_llm, prompt, "VALIDATOR-RETRY")
+                retry_confidence = parse_confidence(retry_response)
+                if retry_confidence != 0.5:
+                    confidence = retry_confidence
+                    response = retry_response
+                    logger.info(f"VALIDATOR-RETRY | Got confidence: {confidence}")
+
+            # Clean display response
             display_response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
             if not display_response:
                 display_response = f"Confidence: {confidence}\nReason: Extracted from model reasoning"
 
-            logger.info(f"Parsed confidence: {confidence}")
+            previous_history = list(state.get("confidence_history", []))
+            previous_history.append(confidence)
+
+            logger.info(f"VALIDATOR | Confidence: {confidence} | History: {previous_history}")
 
             return {
                 "validation": display_response,
                 "confidence": confidence,
-                "validator_output": display_response
+                "validator_output": display_response,
+                "confidence_history": previous_history
             }
 
         except Exception as e:
-            logger.error(f"Validator failed: {e}")
+            logger.error(f"VALIDATOR | Fatal error: {e}")
             return {
                 "validation": f"Validation error: {str(e)}",
                 "confidence": 0.5,
-                "validator_output": f"Validation error: {str(e)}"
+                "validator_output": f"Validation error: {str(e)}",
+                "confidence_history": list(state.get("confidence_history", [])) + [0.5]
             }
 
     # -------- CONTROLLER --------
@@ -269,21 +382,24 @@ Do NOT include any other text, thinking, or preamble. Just those two lines."""
         confidence = state.get("confidence", 0)
         iteration = state.get("iteration", 0)
 
-        logger.info(f"Controller check — confidence: {confidence}, iteration: {iteration}/{max_iterations}")
+        logger.info(f"CONTROLLER | Confidence: {confidence} | Iteration: {iteration}/{max_iterations}")
 
         if confidence >= 0.85:
-            logger.info("Confidence threshold met, finalizing")
+            logger.info("CONTROLLER | → FINALIZE (confidence threshold met)")
             return "finalize"
         if iteration >= max_iterations:
-            logger.info("Max iterations reached, finalizing")
+            logger.info("CONTROLLER | → FINALIZE (max iterations reached)")
             return "finalize"
 
-        logger.info("Sending to refinement")
+        logger.info("CONTROLLER | → REFINE (below threshold)")
         return "refine"
 
     # -------- REFINE --------
     def refine_node(state):
         try:
+            current_iteration = state.get("iteration", 0) + 1
+            logger.info(f"REFINE | Starting iteration {current_iteration}")
+
             prompt = f"""Improve the answer below based on the critique provided.
 Keep what is already correct. Fix what is wrong. Fill in what is missing.
 
@@ -295,14 +411,12 @@ Critique:
 
 Provide the improved answer:"""
 
-            improved = generator_llm.invoke(prompt[:MAX_PROMPT_CHARS]).content
+            improved = safe_invoke(generator_llm, prompt, f"REFINE-{current_iteration}")
 
-            # Create a new list to avoid state mutation issues
             previous = list(state.get("refinement_outputs", []))
             previous.append(improved)
 
-            current_iteration = state.get("iteration", 0) + 1
-            logger.info(f"Refinement {current_iteration} produced {len(improved)} chars")
+            logger.info(f"REFINE | Iteration {current_iteration} complete")
 
             return {
                 "draft": improved,
@@ -311,7 +425,7 @@ Provide the improved answer:"""
             }
 
         except Exception as e:
-            logger.error(f"Refinement failed: {e}")
+            logger.error(f"REFINE | Fatal error: {e}")
             return {
                 "iteration": state.get("iteration", 0) + 1
             }
@@ -319,25 +433,36 @@ Provide the improved answer:"""
     # -------- FINALIZE --------
     def finalize_node(state):
         try:
-            if state.get("confidence", 1.0) < 0.85:
-                compressed = summarizer_llm.invoke(
-                    f"Summarize this critique as a failure pattern in under 120 words:\n{state.get('critique', 'No critique')}"
-                ).content[:500]
+            confidence = state.get("confidence", 1.0)
+            logger.info(f"FINALIZE | Final confidence: {confidence}")
+
+            if confidence < 0.85:
+                logger.info("FINALIZE | Storing failure pattern in memory")
+
+                compressed = safe_invoke(
+                    summarizer_llm,
+                    f"Summarize this critique as a failure pattern in under 120 words:\n{state.get('critique', 'No critique')}",
+                    "FAILURE-SUMMARIZER"
+                )[:500]
 
                 vector_store.add_documents([
                     Document(page_content=f"Failure Pattern: {compressed}")
                 ])
 
-                logger.info("Stored failure pattern in memory")
+                logger.info("FINALIZE | Failure pattern stored")
+            else:
+                logger.info("FINALIZE | High confidence — no failure pattern stored")
 
         except Exception as e:
-            logger.warning(f"Failed to store memory (non-fatal): {e}")
+            logger.warning(f"FINALIZE | Memory storage failed (non-fatal): {e}")
 
         return {"final_answer": state.get("draft", "No answer generated")}
 
     # -------- SUMMARIZER --------
     def summarizer_node(state):
         try:
+            logger.info("SUMMARIZER | Generating process summary")
+
             prompt = f"""Summarize the full reasoning process concisely.
 
 Final Answer:
@@ -355,13 +480,18 @@ Include:
 - Weaknesses
 - Final confidence: {state.get('confidence', 'N/A')}"""
 
-            summary = summarizer_llm.invoke(prompt).content
+            summary = safe_invoke(summarizer_llm, prompt, "SUMMARIZER")
             summary = summary[:MAX_SUMMARY_CHARS]
+
+            logger.info("SUMMARIZER | Summary complete")
+            logger.info("=" * 50)
+            logger.info("PIPELINE COMPLETE")
+            logger.info("=" * 50)
 
             return {"summary": summary}
 
         except Exception as e:
-            logger.error(f"Summarizer failed: {e}")
+            logger.error(f"SUMMARIZER | Fatal error: {e}")
             return {"summary": f"Summary generation failed: {str(e)}"}
 
     # -------- GRAPH --------
@@ -402,8 +532,12 @@ if __name__ == "__main__":
     except:
         max_iterations = 5
 
+    log_accumulator.start()
+
     workflow = create_workflow(query, max_iterations)
     result = workflow.compile().invoke({"query": query})
+
+    log_accumulator.stop()
 
     print("\n===== FINAL ANSWER =====\n")
     print(result.get("final_answer"))
@@ -411,22 +545,11 @@ if __name__ == "__main__":
     print("\n===== SUMMARY =====\n")
     print(result.get("summary"))
 
-    print("\n===== GENERATOR OUTPUT =====\n")
-    print(result.get("generator_output"))
-
-    print("\n===== CRITIC OUTPUT =====\n")
-    print(result.get("critic_output"))
-
-    print("\n===== VALIDATOR OUTPUT =====\n")
-    print(result.get("validator_output"))
-
-    print("\n===== REFINEMENT STEPS =====\n")
-    for i, r in enumerate(result.get("refinement_outputs", []), 1):
-        print(f"\n--- Refinement {i} ---\n")
-        print(r)
-
     print("\n===== CONFIDENCE =====\n")
     print(result.get("confidence"))
+
+    print("\n===== CONFIDENCE HISTORY =====\n")
+    print(result.get("confidence_history"))
 
     # Save run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -437,7 +560,8 @@ if __name__ == "__main__":
             "timestamp": timestamp,
             "query": query
         },
-        "outputs": result
+        "outputs": result,
+        "logs": log_accumulator.get_logs()
     }
 
     with open(file_path, "w", encoding="utf-8") as f:
