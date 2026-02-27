@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuraDialectic</title>
+    <style>
+        /* ============ RESET & BASE ============ */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --bg-card-hover: #1a1a25;
+            --bg-input: #1e1e2a;
+            --border-subtle: #2a2a3a;
+            --border-glow: #6c5ce7;
+            --text-primary: #e8e6f0;
+            --text-secondary: #9896a6;
+            --text-muted: #6b6980;
+            --accent-primary: #6c5ce7;
+            --accent-secondary: #a29bfe;
+            --accent-warm: #fd79a8;
+            --accent-success: #00cec9;
+            --accent-warning: #fdcb6e;
+            --accent-danger: #ff7675;
+            --gradient-hero: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 50%, #fd79a8 100%);
+            --gradient-card: linear-gradient(145deg, #16161f 0%, #1a1a28 100%);
+            --shadow-glow: 0 0 30px rgba(108, 92, 231, 0.15);
+            --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        html {
+            font-size: 16px;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ============ BACKGROUND EFFECTS ============ */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(108, 92, 231, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(108, 92, 231, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.07;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-orb--1 {
+            width: 600px;
+            height: 600px;
+            background: var(--accent-primary);
+            top: -200px;
+            right: -100px;
+            animation: orbFloat 20s ease-in-out infinite;
+        }
+
+        .bg-orb--2 {
+            width: 400px;
+            height: 400px;
+            background: var(--accent-warm);
+            bottom: -100px;
+            left: -100px;
+            animation: orbFloat 25s ease-in-out infinite reverse;
+        }
+
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -20px) scale(1.05); }
+            66% { transform: translate(-20px, 15px) scale(0.95); }
+        }
+
+        /* ============ LAYOUT ============ */
+        .app {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+        }
+
+        /* ============ HEADER ============ */
+        .header {
+            text-align: center;
+            padding: 2rem 0 3rem;
+        }
+
+        .header__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            background: rgba(108, 92, 231, 0.1);
+            border: 1px solid rgba(108, 92, 231, 0.2);
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1.5rem;
+        }
+
+        .header__badge-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-success);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .header__title {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 800;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            margin-bottom: 0.75rem;
+        }
+
+        .header__subtitle {
+            font-size: 1.05rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+            font-weight: 400;
+        }
+
+        /* ============ INPUT SECTION ============ */
+        .input-section {
+            background: var(--gradient-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-card);
+            transition: border-color var(--transition-smooth);
+        }
+
+        .input-section:focus-within {
+            border-color: rgba(108, 92, 231, 0.4);
+            box-shadow: var(--shadow-card), var(--shadow-glow);
+        }
+
+        .input-section__label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.75rem;
+        }
+
+        .input-section__textarea {
+            width: 100%;
+            min-height: 120px;
+            max-height: 300px;
+            padding: 1rem 1.25rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 1rem;
+            line-height: 1.6;
+            resize: vertical;
+            transition: border-color var(--transition-fast);
+            outline: none;
+        }
+
+        .input-section__textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .input-section__textarea:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .input-section__controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 1.25rem;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .input-section__iterations {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .input-section__iterations label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .input-section__iterations input {
+            width: 70px;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            text-align: center;
+            outline: none;
+            transition: border-color var(--transition-fast);
+        }
+
+        .input-section__iterations input:focus {
+            border-color: var(--accent-primary);
+        }
+
+        /* ============ BUTTON ============ */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.75rem 2rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-smooth);
+            outline: none;
+        }
+
+        .btn--primary {
+            background: var(--accent-primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+        }
+
+        .btn--primary:hover:not(:disabled) {
+            background: #7c6ef0;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 25px rgba(108, 92, 231, 0.4);
+        }
+
+        .btn--primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn--primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn__icon {
+            font-size: 1.1rem;
+            display: flex;
+        }
+
+        /* ============ STATUS BAR ============ */
+        .status-bar {
+            display: none;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            background: rgba(108, 92, 231, 0.08);
+            border: 1px solid rgba(108, 92, 231, 0.15);
+            border-radius: var(--radius-lg);
+            margin-bottom: 2rem;
+            animation: fadeSlideIn 0.3s ease-out;
+        }
+
+        .status-bar--visible {
+            display: flex;
+        }
+
+        .status-bar--error {
+            background: rgba(255, 118, 117, 0.08);
+            border-color: rgba(255, 118, 117, 0.2);
+        }
+
+        .status-bar__spinner {
+            width: 20px;
+            height: 20px;
+            border: 2.5px solid rgba(108, 92, 231, 0.2);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-bar__text {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .status-bar__timer {
+            margin-left: auto;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+        }
+
+        /* ============ RESULTS ============ */
+        .results {
+            display: none;
+            animation: fadeSlideIn 0.5s ease-out;
+        }
+
+        .results--visible {
+            display: block;
+        }
+
+        @keyframes fadeSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ============ CONFIDENCE METER ============ */
+        .confidence-meter {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+            background: var(--gradient-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            margin-bottom: 1.5rem;
+        }
+
+        .confidence-meter__ring {
+            position: relative;
+            width: 72px;
+            height: 72px;
+            flex-shrink: 0;
+        }
+
+        .confidence-meter__ring svg {
+            transform: rotate(-90deg);
+        }
+
+        .confidence-meter__ring-bg {
+            fill: none;
+            stroke: var(--border-subtle);
+            stroke-width: 5;
+        }
+
+        .confidence-meter__ring-fill {
+            fill: none;
+            stroke-width: 5;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease-out, stroke 0.3s ease;
+        }
+
+        .confidence-meter__ring-value {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .confidence-meter__info {
+            flex: 1;
+        }
+
+        .confidence-meter__label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.25rem;
+        }
+
+        .confidence-meter__status {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .confidence-meter__iterations {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.2rem;
+        }
+
+        /* ============ RESULT CARDS ============ */
+        .result-card {
+            background: var(--gradient-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            transition: border-color var(--transition-smooth);
+        }
+
+        .result-card:hover {
+            border-color: rgba(108, 92, 231, 0.2);
+        }
+
+        .result-card--primary {
+            border-color: rgba(108, 92, 231, 0.3);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .result-card__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background var(--transition-fast);
+        }
+
+        .result-card__header:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .result-card__header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .result-card__icon {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        .result-card__icon--generator {
+            background: rgba(108, 92, 231, 0.15);
+        }
+
+        .result-card__icon--critic {
+            background: rgba(253, 121, 168, 0.15);
+        }
+
+        .result-card__icon--validator {
+            background: rgba(0, 206, 201, 0.15);
+        }
+
+        .result-card__icon--summary {
+            background: rgba(253, 203, 110, 0.15);
+        }
+
+        .result-card__icon--answer {
+            background: rgba(108, 92, 231, 0.2);
+        }
+
+        .result-card__icon--refinement {
+            background: rgba(162, 155, 254, 0.15);
+        }
+
+        .result-card__title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .result-card__chevron {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            transition: transform var(--transition-smooth);
+        }
+
+        .result-card--open .result-card__chevron {
+            transform: rotate(180deg);
+        }
+
+        .result-card__body {
+            display: none;
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .result-card--open .result-card__body {
+            display: block;
+            animation: fadeSlideIn 0.25s ease-out;
+        }
+
+        .result-card__content {
+            padding: 1.25rem;
+            background: var(--bg-input);
+            border-radius: var(--radius-md);
+            font-size: 0.9rem;
+            line-height: 1.75;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .result-card__content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .result-card__content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .result-card__content::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 3px;
+        }
+
+        /* ============ REFINEMENT STEPS ============ */
+        .refinement-step {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(162, 155, 254, 0.05);
+            border: 1px solid rgba(162, 155, 254, 0.1);
+            border-radius: var(--radius-md);
+        }
+
+        .refinement-step__label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.5rem;
+        }
+
+        .refinement-step__content {
+            font-size: 0.88rem;
+            line-height: 1.7;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* ============ RESPONSIVE ============ */
+        @media (max-width: 640px) {
+            .app {
+                padding: 1rem 1rem 3rem;
+            }
+
+            .input-section {
+                padding: 1.5rem;
+            }
+
+            .input-section__controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn--primary {
+                justify-content: center;
+            }
+
+            .confidence-meter {
+                flex-direction: column;
+                text-align: center;
+                padding: 1.5rem;
+            }
+
+            .result-card__header {
+                padding: 0.875rem 1.25rem;
+            }
+
+            .result-card__body {
+                padding: 0 1.25rem 1.25rem;
+            }
+        }
+
+        /* ============ FONTS ============ */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        /* ============ SCROLLBAR GLOBAL ============ */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-orb bg-orb--1"></div>
+    <div class="bg-orb bg-orb--2"></div>
+
+    <div class="app">
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header__badge">
+                <span class="header__badge-dot"></span>
+                Multi-Agent Reasoning System
+            </div>
+            <h1 class="header__title">NeuraDialectic</h1>
+            <p class="header__subtitle">Generate, critique, validate, and refine answers through iterative AI dialectics</p>
+        </header>
+
+        <!-- INPUT -->
+        <section class="input-section">
+            <label class="input-section__label" for="query-input">Your Question</label>
+            <textarea
+                id="query-input"
+                class="input-section__textarea"
+                placeholder="Ask anything — the system will generate, critique, and iteratively refine the answer..."
+                rows="4"
+            ></textarea>
+            <div class="input-section__controls">
+                <div class="input-section__iterations">
+                    <label for="iterations-input">Max Iterations</label>
+                    <input
+                        type="number"
+                        id="iterations-input"
+                        value="5"
+                        min="1"
+                        max="20"
+                    >
+                </div>
+                <button id="submit-btn" class="btn btn--primary" onclick="submitQuery()">
+                    <span class="btn__icon">⟐</span>
+                    Process Query
+                </button>
+            </div>
+        </section>
+
+        <!-- STATUS BAR -->
+        <div id="status-bar" class="status-bar">
+            <div class="status-bar__spinner" id="status-spinner"></div>
+            <span class="status-bar__text" id="status-text">Processing your query...</span>
+            <span class="status-bar__timer" id="status-timer">0.0s</span>
+        </div>
+
+        <!-- RESULTS -->
+        <div id="results" class="results">
+            <!-- Confidence -->
+            <div id="confidence-section" class="confidence-meter">
+                <div class="confidence-meter__ring">
+                    <svg width="72" height="72" viewBox="0 0 72 72">
+                        <circle class="confidence-meter__ring-bg" cx="36" cy="36" r="30"/>
+                        <circle
+                            id="confidence-ring"
+                            class="confidence-meter__ring-fill"
+                            cx="36" cy="36" r="30"
+                            stroke-dasharray="188.5"
+                            stroke-dashoffset="188.5"
+                        />
+                    </svg>
+                    <span class="confidence-meter__ring-value" id="confidence-value">0%</span>
+                </div>
+                <div class="confidence-meter__info">
+                    <div class="confidence-meter__label">Confidence Score</div>
+                    <div class="confidence-meter__status" id="confidence-status">—</div>
+                    <div class="confidence-meter__iterations" id="iterations-display">—</div>
+                </div>
+            </div>
+
+            <!-- Final Answer -->
+            <div id="card-answer" class="result-card result-card--primary result-card--open">
+                <div class="result-card__header" onclick="toggleCard('card-answer')">
+                    <div class="result-card__header-left">
+                        <div class="result-card__icon result-card__icon--answer">✦</div>
+                        <span class="result-card__title">Final Answer</span>
+                    </div>
+                    <span class="result-card__chevron">▾</span>
+                </div>
+                <div class="result-card__body">
+                    <div class="result-card__content" id="content-answer">—</div>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div id="card-summary" class="result-card result-card--open">
+                <div class="result-card__header" onclick="toggleCard('card-summary')">
+                    <div class="result-card__header-left">
+                        <div class="result-card__icon result-card__icon--summary">◈</div>
+                        <span class="result-card__title">Process Summary</span>
+                    </div>
+                    <span class="result-card__chevron">▾</span>
+                </div>
+                <div class="result-card__body">
+                    <div class="result-card__content" id="content-summary">—</div>
+                </div>
+            </div>
+
+            <!-- Generator -->
+            <div id="card-generator" class="result-card">
+                <div class="result-card__header" onclick="toggleCard('card-generator')">
+                    <div class="result-card__header-left">
+                        <div class="result-card__icon result-card__icon--generator">⬡</div>
+                        <span class="result-card__title">Generator Output</span>
+                    </div>
+                    <span class="result-card__chevron">▾</span>
+                </div>
+                <div class="result-card__body">
+                    <div class="result-card__content" id="content-generator">—</div>
+                </div>
+            </div>
+
+            <!-- Critic -->
+            <div id="card-critic" class="result-card">
+                <div class="result-card__header" onclick="toggleCard('card-critic')">
+                    <div class="result-card__header-left">
+                        <div class="result-card__icon result-card__icon--critic">◇</div>
+                        <span class="result-card__title">Critic Output</span>
+                    </div>
+                    <span class="result-card__chevron">▾</span>
+                </div>
+                <div class="result-card__body">
+                    <div class="result-card__content" id="content-critic">—</div>
+                </div>
+            </div>
+
+            <!-- Validator -->
+            <div id="card-validator" class="result-card">
+                <div class="result-card__header" onclick="toggleCard('card-validator')">
+                    <div class="result-card__header-left">
+                        <div class="result-card__icon result-card__icon--validator">⬢</div>
+                        <span class="result-card__title">Validator Output</span>
+                    </div>
+                    <span class="result-card__chevron">▾</span>
+                </div>
+                <div class="result-card__body">
+                    <div class="result-card__content" id="content-validator">—</div>
+                </div>
+            </div>
+
+            <!-- Refinements -->
+            <div id="card-refinements" class="result-card">
+                <div class="result-card__header" onclick="toggleCard('card-refinements')">
+                    <div class="result-card__header-left">
+                        <div class="result-card__icon result-card__icon--refinement">↻</div>
+                        <span class="result-card__title">Refinement Steps</span>
+                    </div>
+                    <span class="result-card__chevron">▾</span>
+                </div>
+                <div class="result-card__body">
+                    <div id="content-refinements">
+                        <div class="result-card__content">No refinements were needed.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let timerInterval = null;
+
+        // ============ TOGGLE CARDS ============
+        function toggleCard(cardId) {
+            const card = document.getElementById(cardId);
+            card.classList.toggle('result-card--open');
+        }
+
+        // ============ TIMER ============
+        function startTimer() {
+            const timerEl = document.getElementById('status-timer');
+            const start = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                timerEl.textContent = elapsed + 's';
+            }, 100);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        // ============ STATUS ============
+        function showStatus(message, isError = false) {
+            const bar = document.getElementById('status-bar');
+            const text = document.getElementById('status-text');
+            const spinner = document.getElementById('status-spinner');
+
+            bar.className = 'status-bar status-bar--visible' + (isError ? ' status-bar--error' : '');
+            text.textContent = message;
+            spinner.style.display = isError ? 'none' : 'block';
+        }
+
+        function hideStatus() {
+            document.getElementById('status-bar').className = 'status-bar';
+        }
+
+        // ============ CONFIDENCE RING ============
+        function setConfidence(value) {
+            const ring = document.getElementById('confidence-ring');
+            const display = document.getElementById('confidence-value');
+            const status = document.getElementById('confidence-status');
+
+            const circumference = 188.5;
+            const offset = circumference - (value * circumference);
+            const percent = Math.round(value * 100);
+
+            ring.style.strokeDashoffset = offset;
+
+            let color;
+            let label;
+            if (value >= 0.85) {
+                color = '#00cec9';
+                label = 'High Confidence';
+            } else if (value >= 0.6) {
+                color = '#fdcb6e';
+                label = 'Moderate Confidence';
+            } else {
+                color = '#ff7675';
+                label = 'Low Confidence';
+            }
+
+            ring.style.stroke = color;
+            display.textContent = percent + '%';
+            display.style.color = color;
+            status.textContent = label;
+            status.style.color = color;
+        }
+
+        // ============ RENDER RESULTS ============
+        function renderResults(data) {
+            const results = document.getElementById('results');
+            results.className = 'results results--visible';
+
+            setConfidence(data.confidence || 0);
+
+            document.getElementById('iterations-display').textContent =
+                `${data.iterations_used || 0} refinement iteration${(data.iterations_used || 0) !== 1 ? 's' : ''} used`;
+
+            document.getElementById('content-answer').textContent = data.final_answer || 'No answer generated.';
+            document.getElementById('content-summary').textContent = data.summary || 'No summary available.';
+            document.getElementById('content-generator').textContent = data.generator_output || '—';
+            document.getElementById('content-critic').textContent = data.critic_output || '—';
+            document.getElementById('content-validator').textContent = data.validator_output || '—';
+
+            const refinementsContainer = document.getElementById('content-refinements');
+            const refinements = data.refinement_outputs || [];
+
+            if (refinements.length === 0) {
+                refinementsContainer.innerHTML = '<div class="result-card__content">No refinements were needed.</div>';
+            } else {
+                refinementsContainer.innerHTML = refinements.map((r, i) => `
+                    <div class="refinement-step">
+                        <div class="refinement-step__label">Iteration ${i + 1}</div>
+                        <div class="refinement-step__content">${escapeHtml(r)}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ============ SUBMIT ============
+        async function submitQuery() {
+            const queryInput = document.getElementById('query-input');
+            const iterationsInput = document.getElementById('iterations-input');
+            const submitBtn = document.getElementById('submit-btn');
+
+            const query = queryInput.value.trim();
+            if (!query) {
+                queryInput.focus();
+                return;
+            }
+
+            const maxIterations = parseInt(iterationsInput.value) || 5;
+
+            // Lock UI
+            submitBtn.disabled = true;
+            document.getElementById('results').className = 'results';
+
+            showStatus('Connecting to NeuraDialectic engine...');
+            startTimer();
+
+            const phases = [
+                { delay: 2000, msg: 'Generator is drafting the initial response...' },
+                { delay: 6000, msg: 'Critic is analyzing the draft...' },
+                { delay: 10000, msg: 'Validator is evaluating confidence...' },
+                { delay: 15000, msg: 'Refining answer based on critique...' },
+                { delay: 25000, msg: 'Running additional refinement cycles...' },
+                { delay: 40000, msg: 'Summarizing the reasoning process...' },
+                { delay: 60000, msg: 'Still working — complex query detected...' },
+            ];
+
+            const phaseTimeouts = phases.map(p =>
+                setTimeout(() => showStatus(p.msg), p.delay)
+            );
+
+            try {
+                const response = await fetch(`${API_URL}/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: query,
+                        max_iterations: maxIterations
+                    })
+                });
+
+                phaseTimeouts.forEach(clearTimeout);
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || `Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                stopTimer();
+                hideStatus();
+                renderResults(data);
+
+            } catch (err) {
+                phaseTimeouts.forEach(clearTimeout);
+                stopTimer();
+
+                let errorMsg = err.message;
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    errorMsg = 'Cannot reach the server. Make sure the backend is running on http://localhost:8000';
+                }
+
+                showStatus('Error: ' + errorMsg, true);
+                console.error('Query failed:', err);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // ============ KEYBOARD SHORTCUT ============
+        document.getElementById('query-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                submitQuery();
+            }
+        });
+
+        // ============ HEALTH CHECK ON LOAD ============
+        (async function checkHealth() {
+            try {
+                const res = await fetch(`${API_URL}/health`);
+                if (res.ok) {
+                    console.log('Backend is healthy ✓');
+                }
+            } catch {
+                console.warn('Backend not reachable — start it with: python server.py');
+            }
+        })();
+    </script>
+</body>
+</html>

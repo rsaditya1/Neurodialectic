@@ -1,0 +1,74 @@
+# Core LangChain ecosystem - pinned for compatibility
+langchain==0.3.25
+langchain-core==0.3.59
+langchain-community==0.3.24
+langchain-groq==0.3.2
+langchain-cohere==0.4.3
+langchain-text-splitters==0.3.8
+
+# LangGraph - workflow orchestration
+langgraph==0.4.1
+langgraph-checkpoint==2.0.25
+
+# LLM provider SDKs
+groq==0.25.0
+cohere==5.15.0
+
+# Embeddings
+sentence-transformers==3.4.1
+huggingface-hub==0.30.2
+
+# Vector store
+chromadb==0.6.3
+
+# Tokenizers and transformers
+tokenizers==0.21.1
+transformers==4.52.3
+
+# HTTP and API
+httpx==0.28.1
+httpx-sse==0.4.0
+requests==2.32.3
+aiohttp==3.12.4
+urllib3==2.4.0
+
+# Data and serialization
+pydantic==2.11.3
+pydantic-core==2.33.1
+pydantic-settings==2.9.1
+
+# Environment
+python-dotenv==1.1.0
+
+# FastAPI backend server
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# CORS and web
+starlette==0.46.2
+
+# Utilities
+tenacity==9.1.2
+orjson==3.10.18
+jsonpatch==1.33
+PyYAML==6.0.2
+numpy==1.26.4
+pillow==11.2.1
+tqdm==4.67.1
+filelock==3.18.0
+fsspec==2025.3.2
+safetensors==0.5.3
+scipy==1.15.3
+scikit-learn==1.6.1
+joblib==1.4.2
+threadpoolctl==3.6.0
+typing-extensions==4.13.2
+packaging==24.2
+certifi==2025.1.31
+charset-normalizer==3.4.2
+idna==3.10
+annotated-types==0.7.0
+anyio==4.9.0
+sniffio==1.3.1
+click==8.1.8
+h11==0.14.0
